@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"os"
 	"path/filepath"
 
@@ -116,5 +117,42 @@ func (a *App) SaveFileDialog(content string) (FileInfo, error) {
 		Path:    path,
 		Content: content,
 		Name:    filepath.Base(path),
+	}, nil
+}
+
+// ExportPdfDialog opens a save dialog for PDF and writes the base64 content
+func (a *App) ExportPdfDialog(base64Content string, defaultName string) (FileInfo, error) {
+	path, err := runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
+		Title:           "Export PDF",
+		DefaultFilename: defaultName,
+		Filters: []runtime.FileFilter{
+			{
+				DisplayName: "PDF Files (*.pdf)",
+				Pattern:     "*.pdf",
+			},
+		},
+	})
+	if err != nil {
+		return FileInfo{}, err
+	}
+	if path == "" {
+		return FileInfo{}, nil // user cancelled
+	}
+
+	// Decode base64 content
+	dec, err := base64.StdEncoding.DecodeString(base64Content)
+	if err != nil {
+		return FileInfo{}, err
+	}
+
+	// Write to PDF file
+	err = os.WriteFile(path, dec, 0644)
+	if err != nil {
+		return FileInfo{}, err
+	}
+
+	return FileInfo{
+		Path: path,
+		Name: filepath.Base(path),
 	}, nil
 }

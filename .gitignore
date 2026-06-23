@@ -46,3 +46,4 @@ pnpm-debug.log*
 .env
 .env.local
 .env.*.local
+test.pdf

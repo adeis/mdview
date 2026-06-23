@@ -4,10 +4,24 @@
     GetInitialFile, 
     SaveFile, 
     OpenFileDialog, 
-    SaveFileDialog 
+    SaveFileDialog,
+    ExportPdfDialog
   } from '../wailsjs/go/main/App.js';
   import Editor from './components/Editor.svelte';
   import Viewer from './components/Viewer.svelte';
+  import { marked } from 'marked';
+  
+  import { jsPDF } from 'jspdf';
+  import html2canvas from 'html2canvas';
+  window.html2canvas = html2canvas;
+
+  // Configure marked options
+  marked.setOptions({
+    gfm: true,
+    breaks: true,
+    headerIds: true,
+    mangle: false
+  });
   
   // Icon Imports
   import { 
@@ -131,8 +145,124 @@
     }
   }
 
-  function exportPdf() {
-    window.print();
+  // Reactive parsed HTML for the hidden PDF export container
+  $: parsedHtml = marked.parse(markdown || "*No content*");
+
+  async function exportPdf() {
+    const element = document.getElementById('pdf-export-container');
+    if (!element) {
+      alert("Export container not found!");
+      return;
+    }
+
+    try {
+      // Ensure all web fonts are fully loaded before capturing
+      await document.fonts.ready;
+
+      // 1. Detect elements crossing page boundaries and insert HTML/table row spacers
+      const pageHeightPx = 1123; // A4 height at 96 DPI
+      const pageMarginPx = 54; // standard top/bottom page margin
+      const maxContentHeight = pageHeightPx - (pageMarginPx * 2); // 1015px printable area
+
+      // Find critical block elements to avoid splitting: table rows, code pre blocks, quotes, and headings
+      const elementsToAvoid = Array.from(element.querySelectorAll('tr, pre, blockquote, h1, h2, h3'));
+      const spacers = [];
+
+      for (let i = 0; i < elementsToAvoid.length; i++) {
+        const el = elementsToAvoid[i];
+        const rect = el.getBoundingClientRect();
+        const containerRect = element.getBoundingClientRect();
+        const elTop = rect.top - containerRect.top;
+        const elBottom = elTop + rect.height;
+
+        // Skip elements that are too tall to fit on a single page anyway
+        if (rect.height >= maxContentHeight) continue;
+
+        const currentPage = Math.floor(elTop / pageHeightPx);
+        const pageBoundary = (currentPage + 1) * pageHeightPx;
+
+        // If the element overlaps with the A4 page boundary, push it to the next page
+        if (elTop < pageBoundary && elBottom > pageBoundary) {
+          const spacerHeight = (pageBoundary + pageMarginPx) - elTop;
+          let spacer;
+
+          if (el.tagName === 'TR') {
+            // Valid HTML spacer for table rows: insert a new row with an empty tall cell
+            spacer = document.createElement('tr');
+            spacer.className = 'pdf-page-spacer';
+            const td = document.createElement('td');
+            td.colSpan = el.cells.length; // span all columns
+            td.style.height = `${spacerHeight}px`;
+            td.style.border = 'none';
+            td.style.padding = '0';
+            spacer.appendChild(td);
+          } else {
+            // Standard block spacer for divs/paragraphs/headings
+            spacer = document.createElement('div');
+            spacer.style.height = `${spacerHeight}px`;
+            spacer.style.clear = 'both';
+            spacer.className = 'pdf-page-spacer';
+          }
+
+          // Insert spacer in front of the element to push it down
+          el.parentNode.insertBefore(spacer, el);
+          spacers.push(spacer);
+        }
+      }
+
+      // 2. Render the off-screen A4 container (now fully paginated) to canvas
+      const canvas = await html2canvas(element, {
+        scale: 2, // Crisp high-resolution quality
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#ffffff'
+      });
+
+      // 3. Remove all spacers immediately after capture to restore original DOM state
+      spacers.forEach(spacer => {
+        if (spacer.parentNode) {
+          spacer.parentNode.removeChild(spacer);
+        }
+      });
+
+      // 4. Slice the high-res canvas image into A4 PDF pages
+      const imgData = canvas.toDataURL('image/jpeg', 0.95);
+      
+      const doc = new jsPDF({
+        orientation: 'portrait',
+        unit: 'pt',
+        format: 'a4'
+      });
+
+      const imgWidth = 595.28;
+      const pageHeight = 841.89;
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      
+      let heightLeft = imgHeight;
+      let position = 0;
+
+      // Render page 1
+      doc.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
+
+      // Slice remaining height into subsequent pages
+      while (heightLeft > 0) {
+        position = heightLeft - imgHeight;
+        doc.addPage();
+        doc.addImage(imgData, 'JPEG', 0, position, imgWidth, imgHeight);
+        heightLeft -= pageHeight;
+      }
+
+      // 5. Save generated PDF
+      const pdfBase64 = doc.output('datauristring').split(',')[1];
+      const defaultPdfName = fileName.replace(/\.md$/, '') + '.pdf';
+      const fileInfo = await ExportPdfDialog(pdfBase64, defaultPdfName);
+      if (fileInfo && fileInfo.path) {
+        console.log("PDF exported successfully to: " + fileInfo.path);
+      }
+    } catch (err) {
+      alert("Failed to export PDF: " + err);
+    }
   }
 </script>
 
@@ -261,6 +391,11 @@
       <span class="stat-item">Characters: <strong>{charCount}</strong></span>
     </div>
   </footer>
+
+  <!-- Hidden off-screen container for PDF rendering -->
+  <div id="pdf-export-container" class="markdown-body font-serif no-print">
+    {@html parsedHtml}
+  </div>
 </div>
 
 <style>
