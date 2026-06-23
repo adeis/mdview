@@ -68,8 +68,8 @@
         fileName = fileInfo.name || "Untitled.md";
         lastSavedMarkdown = markdown;
         
-        // If file is loaded, view in Reader mode by default as requested
-        viewMode = "viewer";
+        // Open in Split mode (Editor + Viewer) on file load so editor is visible
+        viewMode = "split";
       }
     } catch (e) {
       console.error("Failed to fetch initial file:", e);
