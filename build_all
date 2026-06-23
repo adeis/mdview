@@ -1,0 +1,48 @@
+#!/bin/bash
+
+# Find wails executable
+WAILS_BIN="$(go env GOPATH)/bin/wails"
+
+if [ ! -f "$WAILS_BIN" ]; then
+    if command -v wails &> /dev/null; then
+        WAILS_BIN="wails"
+    else
+        echo "Error: Wails CLI is not installed."
+        exit 1
+    fi
+fi
+
+echo "=============================================="
+echo " Building mdviewer for all target platforms..."
+echo "=============================================="
+
+# 1. Build for macOS (Native)
+echo -e "\n[1/3] Building for macOS (darwin/arm64)..."
+"$WAILS_BIN" build -platform darwin/arm64
+if [ $? -eq 0 ]; then
+    echo "✓ macOS build successful! Output in build/bin/"
+else
+    echo "✗ macOS build failed."
+fi
+
+# 2. Build for Windows
+echo -e "\n[2/3] Building for Windows (windows/amd64)..."
+"$WAILS_BIN" build -platform windows/amd64
+if [ $? -eq 0 ]; then
+    echo "✓ Windows build successful! Output in build/bin/"
+else
+    echo "✗ Windows build failed. (Note: May require Mingw-w64 toolchain)"
+fi
+
+# 3. Build for Linux
+echo -e "\n[3/3] Building for Linux (linux/amd64)..."
+"$WAILS_BIN" build -platform linux/amd64
+if [ $? -eq 0 ]; then
+    echo "✓ Linux build successful! Output in build/bin/"
+else
+    echo "✗ Linux build failed. (Note: Cross-compiling for Linux from macOS usually requires Docker or a native toolchain)"
+fi
+
+echo -e "\n=============================================="
+echo " Build process completed. Check build/bin/ directory."
+echo "=============================================="

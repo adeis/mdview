@@ -1,0 +1,25 @@
+#!/bin/bash
+
+# Find wails executable
+WAILS_BIN="$(go env GOPATH)/bin/wails"
+
+if [ ! -f "$WAILS_BIN" ]; then
+    echo "Wails executable not found in $WAILS_BIN"
+    echo "Checking in system PATH..."
+    if command -v wails &> /dev/null; then
+        WAILS_BIN="wails"
+    else
+        echo "Error: Wails CLI is not installed. Please run:"
+        echo "go install github.com/wailsapp/wails/v2/cmd/wails@latest"
+        exit 1
+    fi
+fi
+
+# If argument is provided, pass it to wails dev
+if [ $# -gt 0 ]; then
+    echo "Starting mdviewer in development mode with file: $1"
+    "$WAILS_BIN" dev -- "$1"
+else
+    echo "Starting mdviewer in development mode..."
+    "$WAILS_BIN" dev
+fi
